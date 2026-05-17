@@ -1,0 +1,6 @@
+@Microservico.TesteAPI_HostAddress = http://localhost:5286
+
+GET {{Microservico.TesteAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
