@@ -2,6 +2,8 @@
 
 Este projeto é um **API Gateway de alta performance** desenvolvido em **.NET 8** com **YARP (Yet Another Reverse Proxy)**. Ele atua como ponto único de entrada para múltiplos microsserviços, oferecendo **Rate Limiting distribuído (Redis)**, **telemetria em tempo real** e um **Dashboard administrativo (Blazor Server)** para monitoramento ativo do tráfego.
 
+<img width="1903" height="946" alt="image" src="https://github.com/user-attachments/assets/923c5595-aa13-4a44-b32a-b33f073b65a2" />
+
 ---
 
 ## 🏗️ Estrutura do Projeto
