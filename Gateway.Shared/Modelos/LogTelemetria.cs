@@ -11,4 +11,5 @@ public class LogTelemetria
     public long TempoExecucaoMs { get; set; }
     public DateTime DataRequisicao { get; set; }
     public string? ChaveApi { get; set; }
+    public string Projeto { get; set; } = "Geral";
 }

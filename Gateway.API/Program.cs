@@ -9,9 +9,12 @@ var conexaoPostgres = builder.Configuration.GetConnectionString("SupabasePostgre
 builder.Services.AddDbContext<GatewayDbContext>(opcoes =>
     opcoes.UseNpgsql(conexaoPostgres, b => b.MigrationsAssembly("Gateway.API")));
     
-// Configura o Redis
+// Configura o Redis de forma resiliente (não quebra a inicialização caso o Redis esteja offline)
 var conexaoRedis = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(conexaoRedis));
+var opcoesRedis = ConfigurationOptions.Parse(conexaoRedis);
+opcoesRedis.AbortOnConnectFail = false;
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(opcoesRedis));
+
 
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));

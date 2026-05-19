@@ -1,7 +1,395 @@
-﻿@page "/"
+@page "/"
+@inject IDbContextFactory<GatewayDbContext> DbFactory
+@rendermode InteractiveServer
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Gateway API - Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="container-fluid px-4 py-4">
+    <!-- Header com indicador Live -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 font-weight-bold mb-0" style="font-weight: 800; background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">API Gateway Control Center</h1>
+            <p class="text-muted small mb-0">Monitoramento de tráfego, latência e segurança de múltiplos microsserviços em tempo real</p>
+        </div>
+        <div class="glass-card py-2 px-3 d-flex align-items-center gap-2" style="border-radius: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border-color: rgba(16, 185, 129, 0.3);">
+            <span class="live-indicator"></span>
+            <span class="text-white small" style="font-weight: 600; letter-spacing: 0.5px;">MONITORAMENTO ATIVO</span>
+        </div>
+    </div>
 
-Welcome to your new app.
+    <!-- Seção de KPIs (Métricas) -->
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="glass-card glow-blue">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="kpi-title">Total de Requisições</div>
+                        <div class="kpi-value" style="color: var(--accent-blue);">@totalRequests.ToString("N0")</div>
+                        <div class="text-muted small">acumulado no Supabase</div>
+                    </div>
+                    <div class="kpi-icon text-primary" style="color: var(--accent-blue) !important;">
+                        <i class="bi bi-activity"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="glass-card glow-purple">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="kpi-title">Latência Média</div>
+                        <div class="kpi-value text-purple" style="color: var(--accent-purple);">@avgLatency.ToString("F1") <span style="font-size: 1.2rem; font-weight: 500;">ms</span></div>
+                        <div class="text-muted small">tempo de resposta do gateway</div>
+                    </div>
+                    <div class="kpi-icon text-purple" style="color: var(--accent-purple) !important;">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="glass-card glow-emerald">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="kpi-title">Taxa de Sucesso</div>
+                        <div class="kpi-value text-success" style="color: var(--accent-emerald);">@successRate.ToString("F1")%</div>
+                        <div class="text-muted small">requisições HTTP 2xx/3xx</div>
+                    </div>
+                    <div class="kpi-icon text-success" style="color: var(--accent-emerald) !important;">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="glass-card glow-rose">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="kpi-title">Bloqueios de Segurança</div>
+                        <div class="kpi-value text-danger" style="color: var(--accent-rose);">@blockedRequests.ToString("N0")</div>
+                        <div class="text-muted small">barrados (401/429) no Redis</div>
+                    </div>
+                    <div class="kpi-icon text-danger" style="color: var(--accent-rose) !important;">
+                        <i class="bi bi-shield-fill-x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros de Busca -->
+    <div class="glass-card mb-4">
+        <h5 class="text-white mb-3" style="font-weight: 600;">Filtros de Telemetria</h5>
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="text-muted small mb-1" style="font-weight: 500;">Filtrar por Rota</label>
+                <input type="text" class="form-control glass-input w-100" placeholder="Ex: /api/produtos" @bind="filtroRota" @bind:event="oninput" @onkeyup="HandleKeyUp" />
+            </div>
+
+            <div class="col-12 col-md-2">
+                <label class="text-muted small mb-1" style="font-weight: 500;">Projeto / API</label>
+                <select class="form-select glass-input glass-select w-100" @bind:get="filtroProjeto" @bind:set="OnProjetoChanged">
+                    <option value="Todos">Todos os Projetos</option>
+                    @foreach (var proj in projetosDisponiveis)
+                    {
+                        <option value="@proj">@proj</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-12 col-md-2">
+                <label class="text-muted small mb-1" style="font-weight: 500;">Status HTTP</label>
+                <select class="form-select glass-input glass-select w-100" @bind:get="filtroStatus" @bind:set="OnStatusChanged">
+                    <option value="Todos">Todos os Status</option>
+                    <option value="Sucesso">Sucesso (2xx/3xx)</option>
+                    <option value="Erros">Erros (4xx/5xx)</option>
+                    <option value="Bloqueados">Bloqueados (401/429)</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-3">
+                <label class="text-muted small mb-1" style="font-weight: 500;">Chave de API</label>
+                <input type="text" class="form-control glass-input w-100" placeholder="Buscar por chave..." @bind="filtroChave" @bind:event="oninput" @onkeyup="HandleKeyUp" />
+            </div>
+
+            <div class="col-12 col-md-2 d-flex flex-column gap-1">
+                <label class="text-muted small mb-1 opacity-0" style="font-weight: 500;">&nbsp;</label>
+                <button class="glass-btn glass-btn-primary w-100 justify-content-center" @onclick="CarregarDadosAsync">
+                    <i class="bi bi-arrow-clockwise"></i> Filtrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Logs Recentes -->
+    <div class="glass-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="text-white mb-0" style="font-weight: 600;">Logs de Acesso Recentes</h5>
+            <span class="text-muted small">Exibindo os últimos @logs.Count registros</span>
+        </div>
+
+        @if (logs == null)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+            </div>
+        }
+        else if (!logs.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-database-exclamation text-danger" style="font-size: 2.5rem;"></i>
+                <p class="mt-2">Nenhum log encontrado para os filtros selecionados.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Data / Hora</th>
+                            <th>Projeto</th>
+                            <th>Método</th>
+                            <th>Rota do Gateway</th>
+                            <th>Status Code</th>
+                            <th>Tempo Resposta</th>
+                            <th>Chave de API</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in logs)
+                        {
+                            <tr>
+                                <td class="text-muted small">@log.DataRequisicao.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                <td>
+                                    <span class="badge bg-dark border text-white px-2 py-1" style="font-size: 0.75rem; font-weight: 600; border-color: rgba(255,255,255,0.15) !important;">
+                                        @log.Projeto
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge @ObterClasseMetodo(log.MetodoHttp)" style="font-size: 0.75rem; font-weight: 700; padding: 0.25rem 0.5rem; border-radius: 4px;">
+                                        @log.MetodoHttp
+                                    </span>
+                                </td>
+                                <td class="text-white" style="font-weight: 500;">@ExibirRota(log.Rota)</td>
+                                <td>
+                                    <span class="status-badge @ObterClasseBadgeStatus(log.StatusCode)">
+                                        @if (log.StatusCode == 401 || log.StatusCode == 429)
+                                        {
+                                            <i class="bi bi-shield-lock-fill"></i>
+                                        }
+                                        else if (log.StatusCode >= 200 && log.StatusCode < 400)
+                                        {
+                                            <i class="bi bi-check-circle-fill"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-exclamation-triangle-fill"></i>
+                                        }
+                                        @log.StatusCode @ObterNomeStatus(log.StatusCode)
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="font-weight-bold" style="color: @ObterCorLatencia(log.TempoExecucaoMs); font-weight: 600;">
+                                        @log.TempoExecucaoMs ms
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (log.ChaveApi == "Anonimo")
+                                    {
+                                        <span class="text-muted italic">Anônimo</span>
+                                    }
+                                    else
+                                    {
+                                        <code class="text-primary-emphasis" style="color: var(--accent-blue);">@MascararChave(log.ChaveApi)</code>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Incluir Bootstrap Icons CDN no header -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+@code {
+    private List<LogTelemetria> logs = new();
+    private List<string> projetosDisponiveis = new();
+    
+    private int totalRequests = 0;
+    private double avgLatency = 0;
+    private double successRate = 0;
+    private int blockedRequests = 0;
+
+    private string filtroRota = "";
+    private string filtroProjeto = "Todos";
+    private string filtroStatus = "Todos";
+    private string filtroChave = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarDadosAsync();
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CarregarDadosAsync();
+        }
+    }
+
+    private async Task OnProjetoChanged(string value)
+    {
+        filtroProjeto = value;
+        await CarregarDadosAsync();
+    }
+
+    private async Task OnStatusChanged(string value)
+    {
+        filtroStatus = value;
+        await CarregarDadosAsync();
+    }
+
+    private async Task CarregarDadosAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        
+        // 1. Carrega lista de projetos disponíveis cadastrados no banco para o combobox
+        projetosDisponiveis = await context.LogsTelemetria
+            .Select(l => l.Projeto)
+            .Distinct()
+            .OrderBy(p => p)
+            .ToListAsync();
+
+        // Query base para KPIs
+        var kpiQuery = context.LogsTelemetria.AsQueryable();
+
+        // Se filtramos por projeto, os KPIs devem refletir apenas esse projeto
+        if (filtroProjeto != "Todos")
+        {
+            kpiQuery = kpiQuery.Where(l => l.Projeto == filtroProjeto);
+        }
+
+        // 2. Calcular KPIs com base no filtro de projeto
+        var total = await kpiQuery.CountAsync();
+        totalRequests = total;
+
+        if (total > 0)
+        {
+            avgLatency = await kpiQuery.AverageAsync(l => l.TempoExecucaoMs);
+            
+            var successCount = await kpiQuery.CountAsync(l => l.StatusCode >= 200 && l.StatusCode < 400);
+            successRate = ((double)successCount / total) * 100;
+
+            blockedRequests = await kpiQuery.CountAsync(l => l.StatusCode == 401 || l.StatusCode == 429);
+        }
+        else
+        {
+            avgLatency = 0;
+            successRate = 0;
+            blockedRequests = 0;
+        }
+
+        // 3. Query base para a listagem filtrada
+        var query = context.LogsTelemetria.AsQueryable();
+
+        if (filtroProjeto != "Todos")
+        {
+            query = query.Where(l => l.Projeto == filtroProjeto);
+        }
+
+        if (!string.IsNullOrEmpty(filtroRota))
+        {
+            query = query.Where(l => l.Rota.ToLower().Contains(filtroRota.ToLower()));
+        }
+
+        if (filtroStatus != "Todos")
+        {
+            if (filtroStatus == "Sucesso")
+                query = query.Where(l => l.StatusCode >= 200 && l.StatusCode < 400);
+            else if (filtroStatus == "Erros")
+                query = query.Where(l => l.StatusCode >= 400);
+            else if (filtroStatus == "Bloqueados")
+                query = query.Where(l => l.StatusCode == 401 || l.StatusCode == 429);
+        }
+
+        if (!string.IsNullOrEmpty(filtroChave))
+        {
+            query = query.Where(l => l.ChaveApi != null && l.ChaveApi.ToLower().Contains(filtroChave.ToLower()));
+        }
+
+        // 4. Carregar os últimos 50 logs ordenados por data decrescente
+        logs = await query
+            .OrderByDescending(l => l.DataRequisicao)
+            .Take(50)
+            .ToListAsync();
+    }
+
+    // Métodos Auxiliares de Estilização
+    private string ObterClasseBadgeStatus(int statusCode)
+    {
+        if (statusCode == 401 || statusCode == 429) return "badge-blocked";
+        if (statusCode >= 200 && statusCode < 400) return "badge-2xx";
+        return "badge-5xx";
+    }
+
+    private string ObterNomeStatus(int statusCode)
+    {
+        return statusCode switch
+        {
+            200 => "OK",
+            201 => "Created",
+            204 => "No Content",
+            400 => "Bad Request",
+            401 => "Unauthorized",
+            403 => "Forbidden",
+            404 => "Not Found",
+            429 => "Rate Limit",
+            500 => "Error",
+            _ => ""
+        };
+    }
+
+    private string ObterClasseMetodo(string metodo)
+    {
+        return metodo.ToUpper() switch
+        {
+            "GET" => "method-badge method-get",
+            "POST" => "method-badge method-post",
+            "PUT" => "method-badge method-put",
+            "DELETE" => "method-badge method-delete",
+            _ => "method-badge method-other"
+        };
+    }
+
+    private string ObterCorLatencia(long ms)
+    {
+        if (ms < 150) return "var(--accent-emerald)";
+        if (ms < 600) return "var(--accent-amber)";
+        return "var(--accent-rose)";
+    }
+
+    private string ExibirRota(string? rota)
+    {
+        if (string.IsNullOrEmpty(rota)) return "/";
+        if (rota == "/") return "Início (/)";
+        return rota;
+    }
+
+    private string MascararChave(string? chave)
+    {
+        if (string.IsNullOrEmpty(chave)) return "";
+        if (chave.Length <= 8) return "";
+        return $"{chave.Substring(0, 4)}...{chave.Substring(chave.Length - 4)}";
+    }
+}

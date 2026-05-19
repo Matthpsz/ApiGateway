@@ -1,10 +1,17 @@
 using Gateway.Dashboard.Components;
+using Gateway.Shared.Contexto;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Configura o banco de dados do Supabase Postgres
+var conexaoPostgres = builder.Configuration.GetConnectionString("SupabasePostgres");
+builder.Services.AddDbContextFactory<GatewayDbContext>(opcoes =>
+    opcoes.UseNpgsql(conexaoPostgres));
 
 var app = builder.Build();
 
